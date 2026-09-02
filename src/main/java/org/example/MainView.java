@@ -114,6 +114,9 @@ public class MainView extends AppLayout implements RouterLayout, BeforeEnterObse
         SideNavItem homeItem = new SideNavItem("Acasă", HomeView.class, VaadinIcon.HOME.create());
         nav.addItem(homeItem);
 
+        SideNavItem profilItem = new SideNavItem("Profilul meu", ProfilView.class, VaadinIcon.USER.create());
+        nav.addItem(profilItem);
+
         if (utilizatorCurent.esteCumparator()) {
             SideNavItem cereriItem = new SideNavItem("Cererile mele");
             cereriItem.setPrefixComponent(VaadinIcon.CLIPBOARD.create());

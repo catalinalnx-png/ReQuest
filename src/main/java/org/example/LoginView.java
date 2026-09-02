@@ -1,16 +1,20 @@
 package org.example;
 
+import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Paragraph;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
@@ -25,7 +29,7 @@ import jakarta.persistence.Persistence;
 
 @PageTitle("Autentificare")
 @Route("login")
-public class LoginView extends VerticalLayout {
+public class LoginView extends HorizontalLayout {
     private static final long serialVersionUID = 1L;
 
     private EntityManager em;
@@ -39,11 +43,78 @@ public class LoginView extends VerticalLayout {
         EntityManagerFactory emf = Persistence.createEntityManagerFactory("REQUESTJPA");
         this.em = emf.createEntityManager();
 
+        this.setSizeFull();
+        this.setSpacing(false);
+        this.setPadding(false);
+
+        this.add(construiestePanouBranding(), construiestePanouFormular());
+
+        cmdLogin.addClickListener(e -> autentifica());
+        parola.addKeyPressListener(Key.ENTER, e -> autentifica());
+    }
+
+    private Div construiestePanouBranding() {
+        Icon iconCheck1 = VaadinIcon.CHECK_CIRCLE.create();
+        Icon iconCheck2 = VaadinIcon.CHECK_CIRCLE.create();
+        Icon iconCheck3 = VaadinIcon.CHECK_CIRCLE.create();
+        for (Icon icon : new Icon[]{iconCheck1, iconCheck2, iconCheck3}) {
+            icon.setColor("white");
+            icon.setSize("20px");
+        }
+
+        H1 logo = new H1("ReQuest");
+        logo.getStyle()
+                .set("color", "white")
+                .set("font-size", "3rem")
+                .set("margin", "0");
+
+        Paragraph tagline = new Paragraph("Piața unde cererile tale întâlnesc oferta potrivită.");
+        tagline.getStyle()
+                .set("color", "rgba(255,255,255,0.85)")
+                .set("font-size", "1.15rem")
+                .set("margin-top", "8px")
+                .set("max-width", "380px");
+
+        HorizontalLayout feature1 = creazaFeatureLine(iconCheck1, "Publică cereri pentru ce ai nevoie");
+        HorizontalLayout feature2 = creazaFeatureLine(iconCheck2, "Primește oferte de la vânzători");
+        HorizontalLayout feature3 = creazaFeatureLine(iconCheck3, "Tranzacționează în siguranță");
+
+        VerticalLayout continut = new VerticalLayout(logo, tagline, feature1, feature2, feature3);
+        continut.setSpacing(true);
+        continut.setPadding(false);
+        continut.setAlignItems(FlexComponent.Alignment.START);
+        continut.getStyle().set("max-width", "420px");
+
+        Div panou = new Div(continut);
+        panou.getStyle()
+                .set("background", "linear-gradient(135deg, #4f46e5 0%, #9333ea 100%)")
+                .set("display", "flex")
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("height", "100%")
+                .set("flex", "1")
+                .set("padding", "48px");
+
+        return panou;
+    }
+
+    private HorizontalLayout creazaFeatureLine(Icon icon, String text) {
+        Span textSpan = new Span(text);
+        textSpan.getStyle().set("color", "white").set("font-size", "1rem");
+
+        HorizontalLayout linie = new HorizontalLayout(icon, textSpan);
+        linie.setAlignItems(FlexComponent.Alignment.CENTER);
+        linie.setSpacing(true);
+        linie.getStyle().set("margin-top", "4px");
+        return linie;
+    }
+
+    private Div construiestePanouFormular() {
         Icon iconLock = VaadinIcon.LOCK.create();
-        iconLock.setSize("48px");
+        iconLock.setSize("40px");
         iconLock.getStyle().set("color", "var(--lumo-primary-color)");
 
-        H1 titlu = new H1("Autentificare");
+        H2 titlu = new H2("Autentificare");
         titlu.addClassNames(LumoUtility.Margin.Top.SMALL, LumoUtility.Margin.Bottom.NONE);
 
         Paragraph subtitlu = new Paragraph("Conectează-te la contul tău ReQuest");
@@ -62,23 +133,18 @@ public class LoginView extends VerticalLayout {
         formLayout.setAlignItems(FlexComponent.Alignment.CENTER);
         formLayout.setSpacing(true);
         formLayout.setPadding(false);
+        formLayout.setWidth("340px");
 
-        Div card = new Div(formLayout);
-        card.addClassNames(
-                LumoUtility.Background.BASE,
-                LumoUtility.BorderRadius.LARGE,
-                LumoUtility.BoxShadow.MEDIUM,
-                LumoUtility.Padding.XLARGE);
-        card.setWidth("380px");
+        Div panou = new Div(formLayout);
+        panou.getStyle()
+                .set("display", "flex")
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("height", "100%")
+                .set("flex", "1")
+                .set("background", "var(--lumo-base-color)");
 
-        this.add(card);
-        this.setSizeFull();
-        this.setAlignItems(FlexComponent.Alignment.CENTER);
-        this.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
-        this.addClassNames(LumoUtility.Background.CONTRAST_5);
-
-        cmdLogin.addClickListener(e -> autentifica());
-        parola.addKeyPressListener(com.vaadin.flow.component.Key.ENTER, e -> autentifica());
+        return panou;
     }
 
     private void autentifica() {
