@@ -3,6 +3,7 @@ package org.example;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.html.H1;
@@ -12,7 +13,6 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.data.binder.BeanValidationBinder;
 import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.router.*;
 import jakarta.persistence.EntityManager;
@@ -29,7 +29,7 @@ public class FormCerereView extends VerticalLayout implements HasUrlParameter<In
     // Model date
     private EntityManager em;
     private Cerere cerere = null;
-    private Binder<Cerere> binder = new BeanValidationBinder<>(Cerere.class);
+    private Binder<Cerere> binder = new Binder<>(Cerere.class);
 
     // Componente view
     private H1 titluForm = new H1("Editare Cerere");
@@ -72,17 +72,27 @@ public class FormCerereView extends VerticalLayout implements HasUrlParameter<In
         EntityManagerFactory emf = Persistence.createEntityManagerFactory("REQUESTJPA");
         this.em = emf.createEntityManager();
 
-        status.setItems("deschisa", "inchisa", "anulata");
+        status.setItems("deschisa", "activa", "inchisa", "anulata");
 
         // Populeaza combo-ul de categorii direct din baza de date
         List<Categorie> categorii = em.createQuery("SELECT c FROM Categorie c", Categorie.class).getResultList();
         categorie.setItems(categorii);
         categorie.setItemLabelGenerator(Categorie::getNume);
 
+        // Titlu - obligatoriu
+        binder.forField(titlu)
+                .asRequired("Titlul este obligatoriu")
+                .bind(Cerere::getTitlu, Cerere::setTitlu);
+
+        // Buget maxim - trebuie sa fie strict pozitiv
+        binder.forField(bugetMax)
+                .withValidator(valoare -> valoare != null && valoare > 0,
+                        "Bugetul maxim trebuie să fie un număr pozitiv")
+                .bind(Cerere::getBugetMax, Cerere::setBugetMax);
+
+        // Restul campurilor - fara validare speciala
         binder.bind(idCerere, "idCerere");
-        binder.bind(titlu, "titlu");
         binder.bind(descriere, "descriere");
-        binder.bind(bugetMax, "bugetMax");
         binder.bind(dataLimita, "dataLimita");
         binder.bind(status, "status");
         binder.bind(categorie, "categorie");
@@ -106,19 +116,51 @@ public class FormCerereView extends VerticalLayout implements HasUrlParameter<In
             refreshForm();
         });
 
-        cmdSterge.addClickListener(e -> {
-            stergeCerere();
-            UI.getCurrent().navigate(NavigableGridCerereView.class);
-        });
+        cmdSterge.addClickListener(e -> confirmaStergere());
 
         cmdAbandon.addClickListener(e -> {
             UI.getCurrent().navigate(NavigableGridCerereView.class);
         });
 
         cmdSalveaza.addClickListener(e -> {
-            salveazaCerere();
-            UI.getCurrent().navigate(NavigableGridCerereView.class, this.cerere.getIdCerere());
+            if (valideazaFormular()) {
+                salveazaCerere();
+                UI.getCurrent().navigate(NavigableGridCerereView.class, this.cerere.getIdCerere());
+            }
         });
+    }
+
+    private boolean valideazaFormular() {
+        binder.validate();
+        if (!binder.isValid()) {
+            Notification.show("Formularul conține erori. Verifică titlul și bugetul maxim.");
+            return false;
+        }
+        return true;
+    }
+
+    private void confirmaStergere() {
+        if (this.cerere == null || this.cerere.getIdCerere() == null) {
+            Notification.show("Nu există o cerere de șters!");
+            return;
+        }
+
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Confirmare ștergere");
+        dialog.setText("Ești sigur că vrei să ștergi cererea \"" + this.cerere.getTitlu() + "\"? "
+                + "Această acțiune este ireversibilă și va șterge și ofertele asociate.");
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("Renunță");
+
+        dialog.setConfirmText("Șterge");
+        dialog.setConfirmButtonTheme("error primary");
+        dialog.addConfirmListener(event -> {
+            stergeCerere();
+            UI.getCurrent().navigate(NavigableGridCerereView.class);
+        });
+
+        dialog.open();
     }
 
     private void refreshForm() {
