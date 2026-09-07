@@ -2,7 +2,6 @@ package org.example;
 
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Span;
@@ -12,12 +11,12 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.*;
+import com.vaadin.flow.server.VaadinSession;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @PageTitle("Trimite ofertă")
 @Route(value = "oferta-form", layout = MainView.class)
@@ -26,10 +25,12 @@ public class FormOfertaView extends VerticalLayout implements HasUrlParameter<In
 
     private EntityManager em;
     private Cerere cerere = null;
+    private UtilizatorSesiune utilizatorCurent;
+    private Vanzator vanzatorCurent;
 
     private H1 titluForm = new H1("Trimite ofertă nouă");
     private Span subtitlu = new Span();
-    private ComboBox<Vanzator> vanzator = new ComboBox<>("Vânzător:");
+    private Span vanzatorInfo = new Span();
     private NumberField pret = new NumberField("Preț oferit:");
     private TextField descriere = new TextField("Descriere:");
 
@@ -44,6 +45,19 @@ public class FormOfertaView extends VerticalLayout implements HasUrlParameter<In
 
     @Override
     public void setParameter(BeforeEvent event, @OptionalParameter Integer idCerere) {
+        this.utilizatorCurent = (UtilizatorSesiune)
+                VaadinSession.getCurrent().getAttribute(UtilizatorSesiune.class);
+
+        // SECURITATE: doar vanzatorii pot trimite oferte, si doar in numele propriului cont
+        if (this.utilizatorCurent == null || !this.utilizatorCurent.esteVanzator()) {
+            Notification.show("Doar vânzătorii pot trimite oferte!");
+            UI.getCurrent().navigate(NavigableGridCerereView.class);
+            return;
+        }
+
+        this.vanzatorCurent = em.find(Vanzator.class, this.utilizatorCurent.getIdUtilizator());
+        vanzatorInfo.setText("Trimiți ca: " + (vanzatorCurent != null ? vanzatorCurent.getNume() : "necunoscut"));
+
         if (idCerere != null) {
             this.cerere = em.find(Cerere.class, idCerere);
         }
@@ -53,20 +67,16 @@ public class FormOfertaView extends VerticalLayout implements HasUrlParameter<In
     private void initDataModel() {
         EntityManagerFactory emf = Persistence.createEntityManagerFactory("REQUESTJPA");
         this.em = emf.createEntityManager();
-
-        List<Vanzator> vanzatori = em.createQuery("SELECT v FROM Vanzator v", Vanzator.class).getResultList();
-        vanzator.setItems(vanzatori);
-        vanzator.setItemLabelGenerator(Vanzator::getNume);
     }
 
     private void initViewLayout() {
         FormLayout formLayout = new FormLayout();
-        formLayout.add(vanzator, pret, descriere);
+        formLayout.add(pret, descriere);
         formLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1));
         formLayout.setMaxWidth("400px");
 
         HorizontalLayout actionToolbar = new HorizontalLayout(cmdTrimite, cmdAbandon);
-        this.add(titluForm, subtitlu, formLayout, actionToolbar);
+        this.add(titluForm, subtitlu, vanzatorInfo, formLayout, actionToolbar);
     }
 
     private void initControllerActions() {
@@ -85,10 +95,28 @@ public class FormOfertaView extends VerticalLayout implements HasUrlParameter<In
 
     private void refreshForm() {
         if (this.cerere != null) {
-            subtitlu.setText("Cerere: " + this.cerere.getTitlu()
-                    + " (buget max: " + this.cerere.getBugetMax() + ")");
+            boolean bloccata = this.cerere.esteExpirata()
+                    || !("deschisa".equals(this.cerere.getStatus()) || "activa".equals(this.cerere.getStatus()));
+
+            if (bloccata) {
+                String motiv = this.cerere.esteExpirata()
+                        ? " (cererea a expirat)"
+                        : " (cererea nu mai este deschisă)";
+                subtitlu.setText("Nu poți trimite oferte la cererea \"" + this.cerere.getTitlu()
+                        + "\"" + motiv + ".");
+                pret.setEnabled(false);
+                descriere.setEnabled(false);
+                cmdTrimite.setEnabled(false);
+            } else {
+                subtitlu.setText("Cerere: " + this.cerere.getTitlu()
+                        + " (buget max: " + this.cerere.getBugetMax() + ")");
+                pret.setEnabled(true);
+                descriere.setEnabled(true);
+                cmdTrimite.setEnabled(true);
+            }
         } else {
             subtitlu.setText("Cerere invalidă!");
+            cmdTrimite.setEnabled(false);
         }
     }
 
@@ -97,8 +125,16 @@ public class FormOfertaView extends VerticalLayout implements HasUrlParameter<In
             Notification.show("Nu există o cerere validă pentru această ofertă!");
             return;
         }
-        if (vanzator.getValue() == null) {
-            Notification.show("Selectează un vânzător!");
+        if (this.cerere.esteExpirata()) {
+            Notification.show("Această cerere a expirat, nu mai poți trimite oferte!");
+            return;
+        }
+        if (!("deschisa".equals(this.cerere.getStatus()) || "activa".equals(this.cerere.getStatus()))) {
+            Notification.show("Această cerere nu mai este deschisă pentru oferte!");
+            return;
+        }
+        if (this.vanzatorCurent == null) {
+            Notification.show("Contul de vânzător nu a putut fi identificat!");
             return;
         }
         if (pret.getValue() == null || pret.getValue() <= 0) {
@@ -110,7 +146,8 @@ public class FormOfertaView extends VerticalLayout implements HasUrlParameter<In
             this.em.getTransaction().begin();
 
             Cerere cerereGestionata = this.em.merge(this.cerere);
-            Vanzator vanzatorGestionat = this.em.merge(vanzator.getValue());
+            // SECURITATE: vanzatorul e mereu cel logat, niciodata ales manual
+            Vanzator vanzatorGestionat = this.em.merge(this.vanzatorCurent);
 
             Oferta ofertaNoua = vanzatorGestionat.trimiteOferta(
                     cerereGestionata, pret.getValue(), descriere.getValue());

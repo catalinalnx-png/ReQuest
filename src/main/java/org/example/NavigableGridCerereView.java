@@ -20,11 +20,13 @@ import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.*;
+import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,6 +38,7 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
     private static final long serialVersionUID = 1L;
 
     private EntityManager em;
+    private UtilizatorSesiune utilizatorCurent;
     private List<Cerere> cereri = new ArrayList<>();
     private Cerere cerereSelectata = null;
 
@@ -62,23 +65,41 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
 
     @Override
     public void setParameter(BeforeEvent event, @OptionalParameter Integer id) {
+        this.utilizatorCurent = (UtilizatorSesiune)
+                VaadinSession.getCurrent().getAttribute(UtilizatorSesiune.class);
+
+        aplicaRestrictiiRol();
+        incarcaCereri();
+
         if (id != null) {
-            this.cerereSelectata = em.find(Cerere.class, id);
+            Cerere candidat = em.find(Cerere.class, id);
+            if (candidat != null && (this.utilizatorCurent == null
+                    || this.utilizatorCurent.esteVanzator()
+                    || apartineUtilizatorului(candidat))) {
+                this.cerereSelectata = candidat;
+            }
         }
         this.refreshForm();
+    }
+
+    private boolean apartineUtilizatorului(Cerere c) {
+        return this.utilizatorCurent != null
+                && c.getCumparator() != null
+                && c.getCumparator().getIdUtilizator() != null
+                && c.getCumparator().getIdUtilizator().equals(this.utilizatorCurent.getIdUtilizator());
+    }
+
+    private void aplicaRestrictiiRol() {
+        boolean esteCumparator = this.utilizatorCurent != null && this.utilizatorCurent.esteCumparator();
+        cmdEditCerere.setVisible(esteCumparator);
+        cmdAdaugaCerere.setVisible(esteCumparator);
+        cmdStergeCerere.setVisible(esteCumparator);
+        titluForm.setText(esteCumparator ? "Cererile mele" : "Cereri disponibile pe piață");
     }
 
     private void initDataModel() {
         EntityManagerFactory emf = Persistence.createEntityManagerFactory("REQUESTJPA");
         em = emf.createEntityManager();
-
-        List<Cerere> lst = em.createQuery("SELECT c FROM Cerere c ORDER BY c.titlu", Cerere.class).getResultList();
-        cereri.clear();
-        cereri.addAll(lst);
-
-        if (!lst.isEmpty()) {
-            this.cerereSelectata = cereri.get(0);
-        }
 
         List<Categorie> categorii = em.createQuery("SELECT c FROM Categorie c ORDER BY c.nume", Categorie.class)
                 .getResultList();
@@ -86,7 +107,25 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
         filterCategorie.setItemLabelGenerator(Categorie::getNume);
 
         filterStatus.setItems("deschisa", "activa", "inchisa", "anulata");
+    }
 
+    private void incarcaCereri() {
+        List<Cerere> lst;
+        if (this.utilizatorCurent != null && this.utilizatorCurent.esteCumparator()) {
+            lst = em.createQuery(
+                            "SELECT c FROM Cerere c WHERE c.cumparator.idUtilizator = :id ORDER BY c.titlu",
+                            Cerere.class)
+                    .setParameter("id", this.utilizatorCurent.getIdUtilizator())
+                    .getResultList();
+        } else {
+            lst = em.createQuery(
+                            "SELECT c FROM Cerere c WHERE c.status IN ('deschisa','activa') ORDER BY c.titlu",
+                            Cerere.class)
+                    .getResultList();
+        }
+
+        cereri.clear();
+        cereri.addAll(lst);
         grid.setItems(this.cereri);
     }
 
@@ -97,7 +136,6 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
 
         titluForm.addClassNames(LumoUtility.Margin.Bottom.SMALL);
 
-        // --- Card filtre ---
         filterText.setPlaceholder("Filtrează după titlu...");
         filterText.setValueChangeMode(ValueChangeMode.LAZY);
         filterText.setPrefixComponent(VaadinIcon.SEARCH.create());
@@ -124,7 +162,6 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
                 LumoUtility.Margin.Bottom.MEDIUM);
         cardFiltre.setWidthFull();
 
-        // --- Toolbar acțiuni ---
         cmdEditCerere.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         cmdAdaugaCerere.addThemeVariants(ButtonVariant.LUMO_SUCCESS);
         cmdStergeCerere.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
@@ -132,12 +169,11 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
         HorizontalLayout toolbar = new HorizontalLayout(cmdEditCerere, cmdAdaugaCerere, cmdStergeCerere);
         toolbar.addClassNames(LumoUtility.Margin.Bottom.SMALL);
 
-        // --- Grid ---
         grid.addColumn(Cerere::getTitlu).setHeader("Titlu").setSortable(true).setAutoWidth(true);
         grid.addColumn(Cerere::getDescriere).setHeader("Descriere").setFlexGrow(2);
         grid.addColumn(c -> c.getBugetMax() != null ? c.getBugetMax() + " lei" : "-")
                 .setHeader("Buget Max").setSortable(true).setAutoWidth(true);
-        grid.addComponentColumn(c -> creazaStatusBadge(c.getStatus()))
+        grid.addComponentColumn(this::creazaStatusBadge)
                 .setHeader("Status").setAutoWidth(true);
         grid.addComponentColumn(this::createGridActionsButtons).setHeader("Acțiuni").setAutoWidth(true);
 
@@ -156,16 +192,26 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
         this.setSizeFull();
     }
 
-    private Span creazaStatusBadge(String status) {
-        Span badge = new Span(status);
+    private Span creazaStatusBadge(Cerere c) {
+        // O cerere expirata (data limita depasita) e semnalata vizual, indiferent de status
+        if (c.esteExpirata() && !"inchisa".equals(c.getStatus()) && !"anulata".equals(c.getStatus())) {
+            Span badgeExpirat = new Span("Expirată");
+            badgeExpirat.getElement().getThemeList().add("badge");
+            badgeExpirat.getElement().getThemeList().add("error");
+            badgeExpirat.getElement().getThemeList().add("small");
+            badgeExpirat.getElement().getThemeList().add("pill");
+            return badgeExpirat;
+        }
+
+        Span badge = new Span(c.getStatus());
         badge.getElement().getThemeList().add("badge");
         badge.getElement().getThemeList().add("small");
         badge.getElement().getThemeList().add("pill");
 
-        if (status == null) {
+        if (c.getStatus() == null) {
             return badge;
         }
-        switch (status) {
+        switch (c.getStatus()) {
             case "activa":
             case "deschisa":
                 badge.getElement().getThemeList().add("success");
@@ -204,28 +250,109 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
     }
 
     private Component createGridActionsButtons(Cerere item) {
-        Button cmdEditItem = new Button(VaadinIcon.EDIT.create());
-        cmdEditItem.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE);
-        cmdEditItem.getElement().setAttribute("title", "Editează");
-        cmdEditItem.addClickListener(e -> {
-            grid.asSingleSelect().setValue(item);
-            editCerere();
-        });
+        HorizontalLayout layout = new HorizontalLayout();
+
+        boolean poateEdita = this.utilizatorCurent != null
+                && this.utilizatorCurent.esteCumparator()
+                && apartineUtilizatorului(item);
+
+        if (poateEdita) {
+            Button cmdEditItem = new Button(VaadinIcon.EDIT.create());
+            cmdEditItem.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE);
+            cmdEditItem.getElement().setAttribute("title", "Editează");
+            cmdEditItem.addClickListener(e -> {
+                grid.asSingleSelect().setValue(item);
+                editCerere();
+            });
+            layout.add(cmdEditItem);
+
+            // Anularea e permisa doar cat timp cererea e inca deschisa/activa
+            boolean poateAnula = "deschisa".equals(item.getStatus()) || "activa".equals(item.getStatus());
+            if (poateAnula) {
+                Button cmdAnuleaza = new Button("Anulează");
+                cmdAnuleaza.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE, ButtonVariant.LUMO_ERROR);
+                cmdAnuleaza.addClickListener(e -> confirmaAnulare(item));
+                layout.add(cmdAnuleaza);
+            }
+        }
 
         Button cmdVeziOferte = new Button("Vezi oferte", VaadinIcon.LIST.create());
         cmdVeziOferte.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE);
         cmdVeziOferte.addClickListener(e -> {
             UI.getCurrent().navigate(ListOferteView.class, item.getIdCerere());
         });
+        layout.add(cmdVeziOferte);
 
-        return new HorizontalLayout(cmdEditItem, cmdVeziOferte);
+        return layout;
+    }
+
+    private void confirmaAnulare(Cerere item) {
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Confirmare anulare");
+        dialog.setText("Ești sigur că vrei să anulezi cererea \"" + item.getTitlu() + "\"? "
+                + "Toate ofertele în așteptare vor fi respinse automat, iar vânzătorii vor fi notificați.");
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("Renunță");
+
+        dialog.setConfirmText("Anulează cererea");
+        dialog.setConfirmButtonTheme("error primary");
+        dialog.addConfirmListener(event -> anuleazaCerere(item));
+
+        dialog.open();
+    }
+
+    private void anuleazaCerere(Cerere item) {
+        if (!apartineUtilizatorului(item)) {
+            Notification.show("Nu ai dreptul să anulezi această cerere!");
+            return;
+        }
+        try {
+            this.em.getTransaction().begin();
+
+            Cerere cerereGestionata = this.em.merge(item);
+            cerereGestionata.setStatus("anulata");
+
+            // Respinge automat ofertele in asteptare si notifica vanzatorii
+            for (Oferta o : cerereGestionata.getListaOferte()) {
+                if ("in_asteptare".equals(o.getStatus())) {
+                    o.respinge();
+                    if (o.getVanzator() != null) {
+                        Utilizator vanzatorEntity = this.em.find(
+                                Utilizator.class, o.getVanzator().getIdUtilizator());
+                        Notificare notificare = new Notificare(
+                                "Cererea \"" + cerereGestionata.getTitlu()
+                                        + "\" a fost anulată de cumpărător. Oferta ta a fost respinsă automat.",
+                                "CERERE_ANULATA",
+                                LocalDateTime.now(),
+                                o.getIdOferta(),
+                                "OFERTA"
+                        );
+                        vanzatorEntity.adaugaNotificare(notificare);
+                        this.em.persist(notificare);
+                    }
+                }
+            }
+
+            this.em.getTransaction().commit();
+            Notification.show("Cerere anulată cu succes!");
+            incarcaCereri();
+        } catch (Exception ex) {
+            if (this.em.getTransaction().isActive()) this.em.getTransaction().rollback();
+            Notification.show("Eroare la anulare: " + ex.getMessage());
+        }
     }
 
     private void editCerere() {
         this.cerereSelectata = this.grid.asSingleSelect().getValue();
-        if (this.cerereSelectata != null) {
-            UI.getCurrent().navigate(FormCerereView.class, this.cerereSelectata.getIdCerere());
+        if (this.cerereSelectata == null) {
+            return;
         }
+        if (!apartineUtilizatorului(this.cerereSelectata)) {
+            Notification.show("Nu ai dreptul să editezi această cerere!");
+            return;
+        }
+        UI.getCurrent().navigate(FormCerereView.class, this.cerereSelectata.getIdCerere());
     }
 
     private void updateList() {
@@ -253,6 +380,10 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
     }
 
     private void adaugaCerere() {
+        if (this.utilizatorCurent == null || !this.utilizatorCurent.esteCumparator()) {
+            Notification.show("Doar cumpărătorii pot adăuga cereri!");
+            return;
+        }
         UI.getCurrent().navigate(FormCerereView.class, 999);
     }
 
@@ -260,6 +391,10 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
         this.cerereSelectata = this.grid.asSingleSelect().getValue();
         if (this.cerereSelectata == null) {
             Notification.show("Selectează o cerere din listă înainte de a o șterge!");
+            return;
+        }
+        if (!apartineUtilizatorului(this.cerereSelectata)) {
+            Notification.show("Nu ai dreptul să ștergi această cerere!");
             return;
         }
 
@@ -279,6 +414,10 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
     }
 
     private void stergeCerere() {
+        if (!apartineUtilizatorului(this.cerereSelectata)) {
+            Notification.show("Nu ai dreptul să ștergi această cerere!");
+            return;
+        }
         try {
             if (this.cerereSelectata != null) {
                 this.em.getTransaction().begin();

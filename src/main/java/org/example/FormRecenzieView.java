@@ -57,8 +57,27 @@ public class FormRecenzieView extends VerticalLayout implements HasUrlParameter<
         }
 
         determinaEvaluat();
+        verificaParticiparea();
         verificaRecenzieExistenta();
         refreshForm();
+    }
+
+    private boolean utilizatorEsteParteInTranzactie = false;
+
+    private void verificaParticiparea() {
+        this.utilizatorEsteParteInTranzactie = false;
+        if (this.tranzactie == null || this.tranzactie.getOferta() == null || this.utilizatorCurent == null) {
+            return;
+        }
+        Oferta oferta = this.tranzactie.getOferta();
+
+        boolean esteVanzatorulOfertei = oferta.getVanzator() != null
+                && oferta.getVanzator().getIdUtilizator().equals(this.utilizatorCurent.getIdUtilizator());
+        boolean esteCumparatorulCererii = oferta.getCerere() != null
+                && oferta.getCerere().getCumparator() != null
+                && oferta.getCerere().getCumparator().getIdUtilizator().equals(this.utilizatorCurent.getIdUtilizator());
+
+        this.utilizatorEsteParteInTranzactie = esteVanzatorulOfertei || esteCumparatorulCererii;
     }
 
     private void initViewLayout() {
@@ -125,6 +144,12 @@ public class FormRecenzieView extends VerticalLayout implements HasUrlParameter<
             setFormEnabled(false);
             return;
         }
+        if (!this.utilizatorEsteParteInTranzactie) {
+            // SECURITATE: doar cumparatorul si vanzatorul implicati pot lasa recenzie
+            subtitlu.setText("Nu ai dreptul să lași o recenzie pentru această tranzacție.");
+            setFormEnabled(false);
+            return;
+        }
         if (this.recenzieExistenta) {
             subtitlu.setText("Ai lăsat deja o recenzie pentru această tranzacție. Mulțumim!");
             setFormEnabled(false);
@@ -143,6 +168,10 @@ public class FormRecenzieView extends VerticalLayout implements HasUrlParameter<
     }
 
     private void trimiteRecenzie() {
+        if (!this.utilizatorEsteParteInTranzactie) {
+            Notification.show("Nu ai dreptul să lași o recenzie pentru această tranzacție!");
+            return;
+        }
         if (this.tranzactie == null || this.idEvaluat == null || this.utilizatorCurent == null) {
             Notification.show("Nu se poate trimite recenzia!");
             return;

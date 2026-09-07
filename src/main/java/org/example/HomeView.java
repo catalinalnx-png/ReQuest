@@ -69,6 +69,7 @@ public class HomeView extends VerticalLayout implements BeforeEnterObserver {
                 .set("border-radius", "var(--lumo-border-radius-l)")
                 .set("padding", "36px");
         heroBanner.setWidthFull();
+        heroBanner.addClassNames("fade-in-up");
     }
 
     @Override
@@ -184,7 +185,8 @@ public class HomeView extends VerticalLayout implements BeforeEnterObserver {
                 LumoUtility.Background.BASE,
                 LumoUtility.BorderRadius.LARGE,
                 LumoUtility.BoxShadow.SMALL,
-                LumoUtility.Padding.LARGE);
+                LumoUtility.Padding.LARGE,
+                "hover-lift", "fade-in-up");
         card.setWidthFull();
 
         return card;

@@ -117,6 +117,11 @@ public class MainView extends AppLayout implements RouterLayout, BeforeEnterObse
         SideNavItem profilItem = new SideNavItem("Profilul meu", ProfilView.class, VaadinIcon.USER.create());
         nav.addItem(profilItem);
 
+        if (utilizatorCurent.esteAdmin()) {
+            SideNavItem adminItem = new SideNavItem("Administrare", AdminPanelView.class, VaadinIcon.COG.create());
+            nav.addItem(adminItem);
+        }
+
         if (utilizatorCurent.esteCumparator()) {
             SideNavItem cereriItem = new SideNavItem("Cererile mele");
             cereriItem.setPrefixComponent(VaadinIcon.CLIPBOARD.create());
@@ -130,12 +135,29 @@ public class MainView extends AppLayout implements RouterLayout, BeforeEnterObse
             SideNavItem pietaItem = new SideNavItem("Piață");
             pietaItem.setPrefixComponent(VaadinIcon.CART.create());
             pietaItem.addItem(new SideNavItem("Cereri disponibile", "lista-cereri", VaadinIcon.LIST.create()));
+            pietaItem.addItem(new SideNavItem("Ofertele mele", "ofertele-mele", VaadinIcon.PAPERPLANE.create()));
             pietaItem.setExpanded(true);
             nav.addItem(pietaItem);
         }
 
         SideNavItem notifItem = new SideNavItem("Notificări", "notificari", VaadinIcon.BELL.create());
         nav.addItem(notifItem);
+
+        SideNavItem tranzactiiItem = new SideNavItem(
+                "Tranzacțiile mele", "tranzactiile-mele", VaadinIcon.WALLET.create());
+        nav.addItem(tranzactiiItem);
+
+        SideNavItem vanzatoriItem = new SideNavItem("Vânzători", "vanzatori", VaadinIcon.USERS.create());
+        nav.addItem(vanzatoriItem);
+
+        SideNavItem categoriiItem = new SideNavItem("Categorii", "categorii", VaadinIcon.TAGS.create());
+        nav.addItem(categoriiItem);
+
+        SideNavItem setariItem = new SideNavItem("Setări cont", "setari-cont", VaadinIcon.LOCK.create());
+        nav.addItem(setariItem);
+
+        SideNavItem ajutorItem = new SideNavItem("Ajutor", "ajutor", VaadinIcon.QUESTION_CIRCLE.create());
+        nav.addItem(ajutorItem);
 
         nav.addClassNames(LumoUtility.Margin.Top.MEDIUM);
         addToDrawer(nav);

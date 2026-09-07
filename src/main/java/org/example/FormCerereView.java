@@ -1,11 +1,11 @@
 package org.example;
 
 import com.vaadin.flow.component.UI;
-import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
@@ -15,6 +15,7 @@ import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.router.*;
+import com.vaadin.flow.server.VaadinSession;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
@@ -29,6 +30,7 @@ public class FormCerereView extends VerticalLayout implements HasUrlParameter<In
     // Model date
     private EntityManager em;
     private Cerere cerere = null;
+    private UtilizatorSesiune utilizatorCurent;
     private Binder<Cerere> binder = new Binder<>(Cerere.class);
 
     // Componente view
@@ -55,16 +57,37 @@ public class FormCerereView extends VerticalLayout implements HasUrlParameter<In
 
     @Override
     public void setParameter(BeforeEvent event, @OptionalParameter Integer id) {
+        this.utilizatorCurent = (UtilizatorSesiune)
+                VaadinSession.getCurrent().getAttribute(UtilizatorSesiune.class);
+
+        // SECURITATE: doar cumparatorii pot crea/edita cereri
+        if (this.utilizatorCurent == null || !this.utilizatorCurent.esteCumparator()) {
+            Notification.show("Doar cumpărătorii pot crea sau edita cereri!");
+            UI.getCurrent().navigate(NavigableGridCerereView.class);
+            return;
+        }
+
         if (id != null && id != 999) {
             this.cerere = em.find(Cerere.class, id);
             if (this.cerere == null) {
                 Notification.show("Cererea nu a fost găsită!");
                 adaugaCerereNoua();
+            } else if (!apartineUtilizatorului(this.cerere)) {
+                // SECURITATE: nu poti edita cererea altcuiva
+                Notification.show("Nu ai dreptul să editezi această cerere!");
+                UI.getCurrent().navigate(NavigableGridCerereView.class);
+                return;
             }
         } else {
             adaugaCerereNoua();
         }
         refreshForm();
+    }
+
+    private boolean apartineUtilizatorului(Cerere c) {
+        return c.getCumparator() != null
+                && c.getCumparator().getIdUtilizator() != null
+                && c.getCumparator().getIdUtilizator().equals(this.utilizatorCurent.getIdUtilizator());
     }
 
     private void initDataModel() {
@@ -144,6 +167,10 @@ public class FormCerereView extends VerticalLayout implements HasUrlParameter<In
             Notification.show("Nu există o cerere de șters!");
             return;
         }
+        if (!apartineUtilizatorului(this.cerere)) {
+            Notification.show("Nu ai dreptul să ștergi această cerere!");
+            return;
+        }
 
         ConfirmDialog dialog = new ConfirmDialog();
         dialog.setHeader("Confirmare ștergere");
@@ -174,9 +201,19 @@ public class FormCerereView extends VerticalLayout implements HasUrlParameter<In
         this.cerere.setTitlu("Titlu nou");
         this.cerere.setStatus("deschisa");
         this.cerere.setBugetMax(0.0);
+
+        // SECURITATE: cererea noua se leaga automat de cumparatorul logat, niciodata ales manual
+        if (this.utilizatorCurent != null) {
+            Cumparator cumparatorEntity = em.find(Cumparator.class, this.utilizatorCurent.getIdUtilizator());
+            this.cerere.setCumparator(cumparatorEntity);
+        }
     }
 
     private void stergeCerere() {
+        if (!apartineUtilizatorului(this.cerere)) {
+            Notification.show("Nu ai dreptul să ștergi această cerere!");
+            return;
+        }
         try {
             if (this.cerere != null && this.cerere.getIdCerere() != null) {
                 this.em.getTransaction().begin();
@@ -192,6 +229,10 @@ public class FormCerereView extends VerticalLayout implements HasUrlParameter<In
     }
 
     private void salveazaCerere() {
+        if (!apartineUtilizatorului(this.cerere)) {
+            Notification.show("Nu ai dreptul să modifici această cerere!");
+            return;
+        }
         try {
             this.em.getTransaction().begin();
             this.cerere = this.em.merge(this.cerere);

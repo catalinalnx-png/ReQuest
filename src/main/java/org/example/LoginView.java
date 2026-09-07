@@ -81,13 +81,24 @@ public class LoginView extends HorizontalLayout {
 
         VerticalLayout continut = new VerticalLayout(logo, tagline, feature1, feature2, feature3);
         continut.setSpacing(true);
-        continut.setPadding(false);
+        continut.setPadding(true);
         continut.setAlignItems(FlexComponent.Alignment.START);
         continut.getStyle().set("max-width", "420px");
+        continut.addClassNames("glass-card", "fade-in-up");
+        continut.getStyle()
+                .set("border-radius", "var(--lumo-border-radius-l)")
+                .set("background", "rgba(255, 255, 255, 0.12)")
+                .set("border", "1px solid rgba(255, 255, 255, 0.25)")
+                .set("position", "relative")
+                .set("z-index", "1");
 
         Div panou = new Div(continut);
         panou.getStyle()
-                .set("background", "linear-gradient(135deg, #4f46e5 0%, #9333ea 100%)")
+                .set("background-image",
+                        "linear-gradient(135deg, rgba(79,70,229,0.82), rgba(147,51,234,0.82)), "
+                                + "url('https://picsum.photos/seed/requestapp-login/900/1200')")
+                .set("background-size", "cover")
+                .set("background-position", "center")
                 .set("display", "flex")
                 .set("align-items", "center")
                 .set("justify-content", "center")
@@ -168,7 +179,14 @@ public class LoginView extends HorizontalLayout {
                 return;
             }
 
-            String rol = (utilizator instanceof Vanzator) ? "VANZATOR" : "CUMPARATOR";
+            String rol;
+            if (utilizator instanceof Vanzator) {
+                rol = "VANZATOR";
+            } else if (utilizator instanceof Admin) {
+                rol = "ADMIN";
+            } else {
+                rol = "CUMPARATOR";
+            }
 
             UtilizatorSesiune sesiune = new UtilizatorSesiune(
                     utilizator.getIdUtilizator(),

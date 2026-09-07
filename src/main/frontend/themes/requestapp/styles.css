@@ -1,0 +1,171 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+
+html {
+    /* Repaleta culoarea primara Lumo (albastru default) cu un indigo/violet distinct */
+    --lumo-primary-hue: 243;
+    --lumo-primary-saturation: 75%;
+
+    /* Font nou, geometric, modern - inlocuieste fontul de sistem peste tot */
+    --lumo-font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    /* Colturi mai rotunjite peste tot (butoane, carduri, campuri) */
+    --lumo-border-radius-m: 10px;
+    --lumo-border-radius-l: 20px;
+}
+
+body {
+    background:
+            radial-gradient(circle at 8% 15%, rgba(79, 70, 229, 0.07) 0%, transparent 42%),
+            radial-gradient(circle at 92% 85%, rgba(147, 51, 234, 0.07) 0%, transparent 42%),
+            var(--lumo-base-color);
+    background-attachment: fixed;
+}
+
+/* ===== Card de sticla (glassmorphism) - aplica cu addClassNames("glass-card") ===== */
+.glass-card {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.14);
+}
+
+/* ===== Ridicare usoara la hover - aplica cu addClassNames("hover-lift") ===== */
+.hover-lift {
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 16px 32px rgba(31, 38, 135, 0.18);
+}
+
+/* ===== Animatie de intrare - aplica cu addClassNames("fade-in-up") ===== */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in-up {
+    animation: fadeInUp 0.55s ease both;
+}
+
+/* ===== Animatie de intrare pentru randuri de grid, cu intarziere progresiva ===== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.4s ease both;
+}
+
+/* ===== Fundal cu gradient animat, pentru panouri de branding (Login/Register) ===== */
+.animated-gradient-bg {
+    background: linear-gradient(-45deg, #4338ca, #7c3aed, #9333ea, #6366f1);
+    background-size: 400% 400%;
+    animation: gradientShift 14s ease infinite;
+}
+
+@keyframes gradientShift {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* ===== Blob-uri plutitoare - forme rotunde blurate care se misca lent ===== */
+.blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(50px);
+    opacity: 0.35;
+    background: white;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.blob-1 {
+    width: 260px;
+    height: 260px;
+    top: -60px;
+    left: -60px;
+    animation: floatBlob1 16s ease-in-out infinite;
+}
+
+.blob-2 {
+    width: 320px;
+    height: 320px;
+    bottom: -100px;
+    right: -80px;
+    background: #c4b5fd;
+    animation: floatBlob2 20s ease-in-out infinite;
+}
+
+.blob-3 {
+    width: 180px;
+    height: 180px;
+    top: 40%;
+    right: 8%;
+    background: #a5b4fc;
+    animation: floatBlob3 12s ease-in-out infinite;
+}
+
+@keyframes floatBlob1 {
+    0%, 100% {
+        transform: translate(0, 0) scale(1);
+    }
+    50% {
+        transform: translate(40px, 30px) scale(1.15);
+    }
+}
+
+@keyframes floatBlob2 {
+    0%, 100% {
+        transform: translate(0, 0) scale(1);
+    }
+    50% {
+        transform: translate(-30px, -40px) scale(1.1);
+    }
+}
+
+@keyframes floatBlob3 {
+    0%, 100% {
+        transform: translate(0, 0) scale(1);
+    }
+    50% {
+        transform: translate(20px, -25px) scale(0.9);
+    }
+}
+
+/* ===== Detalii tipografice mai indraznete peste tot ===== */
+h1, h2, h3 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+vaadin-button {
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+/* ===== Badge-uri putin mai late si mai lizibile ===== */
+[theme~="badge"] {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
