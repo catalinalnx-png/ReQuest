@@ -47,9 +47,11 @@ public class AdminPanelView extends VerticalLayout implements BeforeEnterObserve
     private Div panelStatistici = new Div();
     private Div panelUtilizatori = new Div();
     private Div panelCategorii = new Div();
+    private Div panelSesizari = new Div();
 
     private Grid<Utilizator> gridUtilizatori = new Grid<>(Utilizator.class, false);
     private Grid<Categorie> gridCategorii = new Grid<>(Categorie.class, false);
+    private Grid<Raportare> gridSesizari = new Grid<>(Raportare.class, false);
 
     public AdminPanelView() {
         EntityManagerFactory emf = Persistence.createEntityManagerFactory("REQUESTJPA");
@@ -76,6 +78,7 @@ public class AdminPanelView extends VerticalLayout implements BeforeEnterObserve
         incarcaStatistici();
         incarcaUtilizatori();
         incarcaCategorii();
+        incarcaSesizari();
     }
 
     private void initViewLayout() {
@@ -85,21 +88,26 @@ public class AdminPanelView extends VerticalLayout implements BeforeEnterObserve
         Tab tabStatistici = new Tab("Statistici");
         Tab tabUtilizatori = new Tab("Utilizatori");
         Tab tabCategorii = new Tab("Categorii");
-        Tabs tabs = new Tabs(tabStatistici, tabUtilizatori, tabCategorii);
+        Tab tabSesizari = new Tab("Sesizări");
+        Tabs tabs = new Tabs(tabStatistici, tabUtilizatori, tabCategorii, tabSesizari);
 
         panelStatistici.setWidthFull();
         panelUtilizatori.setWidthFull();
         panelCategorii.setWidthFull();
+        panelSesizari.setWidthFull();
         panelUtilizatori.setVisible(false);
         panelCategorii.setVisible(false);
+        panelSesizari.setVisible(false);
 
         construiestePanelUtilizatori();
         construiestePanelCategorii();
+        construiestePanelSesizari();
 
         tabs.addSelectedChangeListener(e -> {
             panelStatistici.setVisible(tabs.getSelectedTab() == tabStatistici);
             panelUtilizatori.setVisible(tabs.getSelectedTab() == tabUtilizatori);
             panelCategorii.setVisible(tabs.getSelectedTab() == tabCategorii);
+            panelSesizari.setVisible(tabs.getSelectedTab() == tabSesizari);
         });
 
         this.add(titlu, tabs, panelStatistici, panelUtilizatori, panelCategorii);
@@ -401,5 +409,96 @@ public class AdminPanelView extends VerticalLayout implements BeforeEnterObserve
         List<Categorie> lst = em.createQuery("SELECT c FROM Categorie c ORDER BY c.nume", Categorie.class)
                 .getResultList();
         gridCategorii.setItems(lst);
+    }
+
+    // ==================== SESIZARI ====================
+
+    private void construiestePanelSesizari() {
+        gridSesizari.addColumn(Raportare::getMotiv).setHeader("Motiv").setAutoWidth(true);
+        gridSesizari.addColumn(r -> "CERERE".equals(r.getTipReferinta()) ? "Cerere" : "Ofertă")
+                .setHeader("Tip").setAutoWidth(true);
+        gridSesizari.addColumn(this::numeRaportor).setHeader("Raportat de").setAutoWidth(true);
+        gridSesizari.addColumn(r -> r.getDescriere() != null && !r.getDescriere().isBlank()
+                        ? r.getDescriere() : "-")
+                .setHeader("Descriere").setFlexGrow(2);
+        gridSesizari.addComponentColumn(this::creazaStatusBadgeSesizare).setHeader("Status").setAutoWidth(true);
+        gridSesizari.addColumn(r -> r.getDataRaportare() != null
+                        ? r.getDataRaportare().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+                        : "-")
+                .setHeader("Data").setAutoWidth(true);
+        gridSesizari.addComponentColumn(this::creazaActiuniSesizare).setHeader("Acțiuni").setAutoWidth(true);
+
+        gridSesizari.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_NO_BORDER);
+        gridSesizari.setWidthFull();
+
+        Div cardGrid = new Div(gridSesizari);
+        cardGrid.addClassNames(
+                LumoUtility.Background.BASE, LumoUtility.BorderRadius.LARGE,
+                LumoUtility.Padding.SMALL, LumoUtility.BoxShadow.SMALL);
+        cardGrid.setWidthFull();
+
+        panelSesizari.add(cardGrid);
+    }
+
+    private String numeRaportor(Raportare r) {
+        if (r.getIdRaportor() == null) return "-";
+        Utilizator u = em.find(Utilizator.class, r.getIdRaportor());
+        return u != null ? u.getNume() : "-";
+    }
+
+    private Span creazaStatusBadgeSesizare(Raportare r) {
+        Span badge = new Span(r.getStatus());
+        badge.getElement().getThemeList().add("badge");
+        badge.getElement().getThemeList().add("small");
+        badge.getElement().getThemeList().add("pill");
+        if ("rezolvata".equals(r.getStatus())) {
+            badge.getElement().getThemeList().add("success");
+        } else if ("respinsa".equals(r.getStatus())) {
+            badge.getElement().getThemeList().add("contrast");
+        } else {
+            badge.getElement().getThemeList().add("error");
+        }
+        return badge;
+    }
+
+    private Component creazaActiuniSesizare(Raportare item) {
+        boolean inAsteptare = "in_asteptare".equals(item.getStatus());
+
+        Button cmdRezolva = new Button("Marchează rezolvată");
+        cmdRezolva.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_TERTIARY_INLINE);
+        cmdRezolva.setEnabled(inAsteptare);
+        cmdRezolva.addClickListener(e -> actualizeazaStatusSesizare(item, true));
+
+        Button cmdRespinge = new Button("Respinge");
+        cmdRespinge.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY_INLINE);
+        cmdRespinge.setEnabled(inAsteptare);
+        cmdRespinge.addClickListener(e -> actualizeazaStatusSesizare(item, false));
+
+        return new HorizontalLayout(cmdRezolva, cmdRespinge);
+    }
+
+    private void actualizeazaStatusSesizare(Raportare item, boolean rezolvata) {
+        try {
+            this.em.getTransaction().begin();
+            Raportare gestionata = this.em.merge(item);
+            if (rezolvata) {
+                gestionata.marcheazaRezolvata();
+            } else {
+                gestionata.respinge();
+            }
+            this.em.getTransaction().commit();
+            Notification.show(rezolvata ? "Sesizare marcată ca rezolvată!" : "Sesizare respinsă!");
+            incarcaSesizari();
+        } catch (Exception ex) {
+            if (this.em.getTransaction().isActive()) this.em.getTransaction().rollback();
+            Notification.show("Eroare: " + ex.getMessage());
+        }
+    }
+
+    private void incarcaSesizari() {
+        List<Raportare> lst = em.createQuery(
+                        "SELECT r FROM Raportare r ORDER BY r.dataRaportare DESC", Raportare.class)
+                .getResultList();
+        gridSesizari.setItems(lst);
     }
 }

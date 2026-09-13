@@ -6,6 +6,7 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.Div;
@@ -17,6 +18,7 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.NumberField;
+import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.*;
@@ -283,7 +285,83 @@ public class NavigableGridCerereView extends VerticalLayout implements HasUrlPar
         });
         layout.add(cmdVeziOferte);
 
+        // Raportarea e disponibila doar vanzatorilor, pe cererile altora (piata)
+        if (this.utilizatorCurent != null && this.utilizatorCurent.esteVanzator()) {
+            Button cmdRaporteaza = new Button(VaadinIcon.FLAG_O.create());
+            cmdRaporteaza.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE, ButtonVariant.LUMO_ERROR);
+            cmdRaporteaza.getElement().setAttribute("title", "Raportează");
+            cmdRaporteaza.addClickListener(e -> deschideDialogRaportare(item.getIdCerere(), "CERERE"));
+            layout.add(cmdRaporteaza);
+        }
+
         return layout;
+    }
+
+    private void deschideDialogRaportare(Integer idReferinta, String tipReferinta) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Raportează " + ("CERERE".equals(tipReferinta) ? "cererea" : "oferta"));
+
+        ComboBox<String> motiv = new ComboBox<>("Motiv");
+        motiv.setItems("Spam", "Preț suspect / posibilă fraudă", "Conținut inadecvat", "Altul");
+        motiv.setWidthFull();
+
+        TextArea descriere = new TextArea("Descriere (opțional)");
+        descriere.setWidthFull();
+
+        Button cmdTrimite = new Button("Trimite sesizarea");
+        cmdTrimite.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+        cmdTrimite.addClickListener(e -> {
+            if (motiv.getValue() == null) {
+                Notification.show("Selectează un motiv!");
+                return;
+            }
+            trimiteRaportare(motiv.getValue(), descriere.getValue(), idReferinta, tipReferinta);
+            dialog.close();
+        });
+
+        Button cmdRenunta = new Button("Renunță", e -> dialog.close());
+
+        VerticalLayout continut = new VerticalLayout(motiv, descriere,
+                new HorizontalLayout(cmdTrimite, cmdRenunta));
+        continut.setPadding(false);
+        dialog.add(continut);
+        dialog.open();
+    }
+
+    private void trimiteRaportare(String motiv, String descriere, Integer idReferinta, String tipReferinta) {
+        if (this.utilizatorCurent == null) {
+            Notification.show("Trebuie să fii autentificat!");
+            return;
+        }
+        try {
+            this.em.getTransaction().begin();
+
+            Raportare raportare = new Raportare(
+                    motiv, descriere, java.time.LocalDateTime.now(),
+                    this.utilizatorCurent.getIdUtilizator(), idReferinta, tipReferinta);
+            this.em.persist(raportare);
+
+            // Notifica toti administratorii
+            List<Admin> admini = this.em.createQuery("SELECT a FROM Admin a", Admin.class).getResultList();
+            for (Admin admin : admini) {
+                Notificare notificare = new Notificare(
+                        "O nouă sesizare a fost înregistrată (" + motiv + ") pentru o "
+                                + ("CERERE".equals(tipReferinta) ? "cerere" : "ofertă") + ".",
+                        "SESIZARE_NOUA",
+                        java.time.LocalDateTime.now(),
+                        raportare.getIdRaportare(),
+                        "RAPORTARE"
+                );
+                admin.adaugaNotificare(notificare);
+                this.em.persist(notificare);
+            }
+
+            this.em.getTransaction().commit();
+            Notification.show("Sesizare trimisă. Mulțumim!");
+        } catch (Exception ex) {
+            if (this.em.getTransaction().isActive()) this.em.getTransaction().rollback();
+            Notification.show("Eroare la trimiterea sesizării: " + ex.getMessage());
+        }
     }
 
     private void confirmaAnulare(Cerere item) {

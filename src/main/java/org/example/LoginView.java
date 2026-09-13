@@ -38,6 +38,7 @@ public class LoginView extends HorizontalLayout {
     private PasswordField parola = new PasswordField("Parolă");
     private Button cmdLogin = new Button("Autentificare");
     private Anchor linkRegister = new Anchor("register", "Nu ai cont? Înregistrează-te aici");
+    private Anchor linkUitatParola = new Anchor("uitat-parola", "Ai uitat parola?");
 
     public LoginView() {
         EntityManagerFactory emf = Persistence.createEntityManagerFactory("REQUESTJPA");
@@ -138,9 +139,10 @@ public class LoginView extends HorizontalLayout {
         cmdLogin.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         linkRegister.addClassNames(LumoUtility.Margin.Top.MEDIUM);
+        linkUitatParola.addClassNames(LumoUtility.FontSize.SMALL);
 
         VerticalLayout formLayout = new VerticalLayout(
-                iconLock, titlu, subtitlu, email, parola, cmdLogin, linkRegister);
+                iconLock, titlu, subtitlu, email, parola, cmdLogin, linkUitatParola, linkRegister);
         formLayout.setAlignItems(FlexComponent.Alignment.CENTER);
         formLayout.setSpacing(true);
         formLayout.setPadding(false);

@@ -6,21 +6,35 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
+import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
+import com.vaadin.flow.server.streams.DownloadHandler;
+import com.vaadin.flow.server.streams.DownloadResponse;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -113,7 +127,81 @@ public class TranzactiileMeleView extends VerticalLayout implements BeforeEnterO
         Button cmdFactura = new Button("Vezi factura");
         cmdFactura.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE);
         cmdFactura.addClickListener(e -> arataFactura(item));
-        return cmdFactura;
+
+        Button cmdDescarca = new Button("Descarcă PDF", VaadinIcon.DOWNLOAD.create());
+        cmdDescarca.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE);
+
+        Anchor linkDescarcare = new Anchor();
+        linkDescarcare.setHref(DownloadHandler.fromInputStream(event -> {
+            byte[] pdfBytes = genereazaPdfBytes(item);
+            return new DownloadResponse(
+                    new ByteArrayInputStream(pdfBytes),
+                    "factura-" + item.getIdTranzactie() + ".pdf",
+                    "application/pdf",
+                    pdfBytes.length);
+        }));
+        linkDescarcare.getElement().setAttribute("download", true);
+        linkDescarcare.getStyle().set("text-decoration", "none");
+        linkDescarcare.add(cmdDescarca);
+
+        return new HorizontalLayout(cmdFactura, linkDescarcare);
+    }
+
+    private byte[] genereazaPdfBytes(Tranzactie t) {
+        try {
+            PDDocument document = new PDDocument();
+            PDPage page = new PDPage(PDRectangle.A4);
+            document.addPage(page);
+
+            String cumparatorNume = t.getOferta() != null && t.getOferta().getCerere() != null
+                    && t.getOferta().getCerere().getCumparator() != null
+                    ? t.getOferta().getCerere().getCumparator().getNume() : "-";
+            String vanzatorNume = t.getOferta() != null && t.getOferta().getVanzator() != null
+                    ? t.getOferta().getVanzator().getNume() : "-";
+            String cerereTitlu = t.getOferta() != null && t.getOferta().getCerere() != null
+                    ? t.getOferta().getCerere().getTitlu() : "-";
+            String data = t.getDataFinalizare() != null
+                    ? t.getDataFinalizare().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) : "-";
+
+            // NOTA: fonturile standard PDF (Helvetica) nu suporta diacritice romanesti (a, i, s, t)
+            // - textul de mai jos e scris deliberat fara diacritice, ca sa nu produca erori la generare.
+            String[] linii = {
+                    "Factura ReQuest",
+                    "",
+                    "Numar tranzactie: #" + t.getIdTranzactie(),
+                    "Data finalizare: " + data,
+                    "Status plata: " + t.getStatusPlata(),
+                    "",
+                    "Cerere: " + cerereTitlu,
+                    "Cumparator: " + cumparatorNume,
+                    "Vanzator: " + vanzatorNume,
+                    "",
+                    "Suma totala: " + t.getSuma() + " lei"
+            };
+
+            PDPageContentStream content = new PDPageContentStream(document, page);
+            float y = 760;
+            for (int i = 0; i < linii.length; i++) {
+                boolean esteTitlu = (i == 0);
+                content.beginText();
+                content.setFont(esteTitlu ? PDType1Font.HELVETICA_BOLD : PDType1Font.HELVETICA,
+                        esteTitlu ? 20 : 12);
+                content.newLineAtOffset(50, y);
+                content.showText(linii[i]);
+                content.endText();
+                y -= esteTitlu ? 40 : 22;
+            }
+            content.close();
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            document.save(baos);
+            document.close();
+            return baos.toByteArray();
+
+        } catch (IOException ex) {
+            Notification.show("Eroare la generarea PDF: " + ex.getMessage());
+            return new byte[0];
+        }
     }
 
     private void arataFactura(Tranzactie item) {
